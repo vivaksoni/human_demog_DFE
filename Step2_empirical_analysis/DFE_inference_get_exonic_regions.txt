@@ -1,0 +1,66 @@
+#1. INTERSECT EXONS WITH REC RATES
+bedtools intersect -a DFE_inference/GRCh37_exons.txt -b recombinationRates/SexAveraged.bedgraph -wo | awk '{print $1,$2,$3,$4,$5,$6,$10,$11}' OFS='\t' > DFE_inference/GRCh37_exons_recRates.txt
+
+
+#2. INTERSECT EXONS WITH MUT RATES
+bedtools intersect -a DFE_inference/GRCh37_exons.txt -b mutationRates/local_mutation_rate_mean.bed -wo | awk '{print $1,$2,$3,$4,$5,$6,$10,$11}' OFS='\t' > DFE_inference/GRCh37_exons_mutRates.txt
+
+
+#3. RUN human_demog_DFE_DFEinf_concatExonData.ipynb to combine exon data
+
+
+#4. GET SNPS FOR EXONS AND INTERGENIC REGIONS
+chroms=($(awk '{print substr($1, 4)}' GRCh37_exons_r_m.bed))
+starts=($(awk '{print $2}' GRCh37_exons_r_m.bed))
+ends=($(awk '{print $3}' GRCh37_exons_r_m.bed))
+inter_ends=($(awk '{print $3+($5*4)}' GRCh37_exons_r_m.bed))
+regions=($(awk '{print $9}' GRCh37_exons_r_m.bed))
+
+for i in $(seq 0 ${#regions[@]}); do bcftools view -v snps -r "${chroms[i]}":${starts[i]}"-${ends[i]}" ALL.chr"${chroms[i]}".phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz | bgzip > ~/human_demog_DFE/DFE_inference/vcf/region"${regions[i]}"_exons.vcf.gz; done
+
+for i in $(seq 0 ${#regions[@]}); do bcftools view -v snps -r "${chroms[i]}":${ends[i]}"-${inter_ends[i]}" ALL.chr"${chroms[i]}".phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz | bgzip > ~/human_demog_DFE/DFE_inference/vcf/region"${regions[i]}"_intergenic.vcf.gz; done
+
+for i in $(seq 0 ${#regions[@]}); do bcftools view -v snps -r "${chroms[i]}":${starts[i]}"-${inter_ends[i]}" ALL.chr"${chroms[i]}".phase3_shapeit2_mvncall_integrated_v5b.20130502.genotypes.vcf.gz | bgzip > ~/human_demog_DFE/DFE_inference/vcf/region"${regions[i]}"_exons_intergenic.vcf.gz; done
+
+for i in *.vcf.gz; do tabix "$i"; done
+
+
+#5. SUBSET VCFS FOR ONLY POPULATIONS OF INTEREST (FOR BOTH MASKED AND UNMASKED REGIONS)
+regs=(exons intergenic exons_intergenic)
+pops=(EAS EUR LWK SAS)
+for r in "${regs[@]}"; do for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do bcftools view -S ../../vcf/vcf_samples_"$p".txt -c 1 -i 'TYPE="SNP"' region"${regions[i]}"_"$r".vcf.gz | bgzip > "$p"/region"${regions[i]}"_"$r".vcf.gz; done; done; done
+for r in "${regs[@]}"; do for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do tabix "$p"/region"${regions[i]}"_"$r".vcf.gz; done; done; done
+
+pops=(LWK_EUR LWK_EAS LWK_SAS EUR_EAS EUR_SAS EAS_SAS)
+for r in "${regs[@]}"; do for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do bcftools view -S ../../vcf/vcf_samples_"$p".txt -c 1 -i 'TYPE="SNP"' region"${regions[i]}"_"$r".vcf.gz | bgzip > "$p"/region"${regions[i]}"_"$r".vcf.gz; done; done; done
+for r in "${regs[@]}"; do for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do tabix "$p"/region"${regions[i]}"_"$r".vcf.gz; done; done; done
+
+
+#6. RUN human_demog_DFE_getFASTA.ipynb TO GET EXONIC, INTERGENIC, AND EXONIC+INTERGENIC SEQUENCES FROM GRCh37_exons_r_m.bed
+
+
+#7. GET ANCESTRAL SEQUENCES
+wget -t 20 https://ftp.ensembl.org/pub/release-74/fasta/ancestral_alleles/homo_sapiens_ancestor_GRCh37_e71.tar.bz2
+
+
+#8. GET ANCESTRAL SEQUENCES FOR SPECIFIC REGIONS
+chroms=($(awk '{print substr($1, 4)}' GRCh37_exons_r_m.bed))
+starts=($(awk '{print $2}' GRCh37_exons_r_m.bed))
+ends=($(awk '{print $3}' GRCh37_exons_r_m.bed))
+inter_ends=($(awk '{print $5}' GRCh37_exons_r_m.bed))
+regions=($(awk '{print $9}' GRCh37_exons_r_m.bed))
+for i in $(seq 1 22); do cat <(echo -e ">chr$i") <(tail -n+2 homo_sapiens_ancestor_"$i".fa) > chr"$i".fasta; done #Renames chrom headers in fasta file
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${starts[i]}" -v end="${ends[i]}" '{if($1=="chr"chrom && $2==start && $3==end)print $1,$2-1,$3}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_exons.fasta; done
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${ends[i]}" -v end="${inter_ends[i]}" '{if($1=="chr"chrom && $3==start && $5==end)print $1,$3-1,$3+($5*4)}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_intergenic.fasta; done
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${starts[i]}" -v end="${inter_ends[i]}" '{if($1=="chr"chrom && $2==start && $5==end)print $1,$2-1,$3+($5*4)}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_exons_intergenic.fasta; done
+
+
+#9. MASK SNPS (AS "X"S) FOR FASTA FILES
+for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do tabix ../../vcf/"$p"/region"${regions[i]}"_exons.vcf.gz "${chroms[i]}" | awk -v start=${starts[i]}" -v end=${ends[i]}" '{print "chr"$1,$2-start,($2-start)+1}' OFS='\t' | bedtools maskfasta -fi ../region"${regions[i]}"_exons.fasta -bed - -mc X -fo "$p"/region"${regions[i]}"_exons.fasta; done; done
+
+for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do tabix ../../vcf/"$p"/region"${regions[i]}"_intergenic.vcf.gz "${chroms[i]}" | awk -v start=${ends[i]}" -v end=${inter_ends[i]}" '{print "chr"$1,$2-start,($2-start)+1}' OFS='\t' | bedtools maskfasta -fi ../region"${regions[i]}"_intergenic.fasta -bed - -mc X -fo "$p"/region"${regions[i]}"_intergenic.fasta; done; done
+
+for p in "${pops[@]}"; do for i in $(seq 0 ${#regions[@]}); do tabix ../../vcf/"$p"/region"${regions[i]}"_exons_intergenic.vcf.gz "${chroms[i]}" | awk -v start=${starts[i]}" -v end=${ends[i]}" '{print "chr"$1,$2-start,($2-start)+1}' OFS='\t' | bedtools maskfasta -fi ../region"${regions[i]}"_exons_intergenic.fasta -bed - -mc X -fo "$p"/region"${regions[i]}"_exons_intergenic.fasta; done; done

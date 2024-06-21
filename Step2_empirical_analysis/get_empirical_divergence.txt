@@ -1,0 +1,25 @@
+#1. RUN human_demog_DFE_getFASTA.ipynb TO GET EXONIC, INTERGENIC, AND EXONIC+INTERGENIC SEQUENCES FROM GRCh37_exons_r_m.bed
+
+#2. GET ANCESTRAL SEQUENCES
+wget -t 20 https://ftp.ensembl.org/pub/release-74/fasta/ancestral_alleles/homo_sapiens_ancestor_GRCh37_e71.tar.bz2
+
+#3. GET ANCESTRAL SEQUENCES FOR SPECIFIC REGIONS
+chroms=($(awk '{print substr($1, 4)}' GRCh37_exons_r_m.bed))
+starts=($(awk '{print $2}' GRCh37_exons_r_m.bed))
+ends=($(awk '{print $3}' GRCh37_exons_r_m.bed))
+inter_ends=($(awk '{print $5}' GRCh37_exons_r_m.bed))
+regions=($(awk '{print $9}' GRCh37_exons_r_m.bed))
+for i in $(seq 1 22); do cat <(echo -e ">chr$i") <(tail -n+2 homo_sapiens_ancestor_"$i".fa) > chr"$i".fasta; done #Renames chrom headers in fasta file
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${starts[i]}" -v end="${ends[i]}" '{if($1=="chr"chrom && $2==start && $3==end)print $1,$2-1,$3}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_exons.fasta; done
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${ends[i]}" -v end="${inter_ends[i]}" '{if($1=="chr"chrom && $3==start && $5==end)print $1,$3-1,$3+($5*4)}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_intergenic.fasta; done
+
+for i in $(seq 0 ${#regions[@]}); do bedtools getfasta -fi chr"${chroms[i]}".fasta -bed <(awk -v chrom="${chroms[i]}" -v start="${starts[i]}" -v end="${inter_ends[i]}" '{if($1=="chr"chrom && $2==start && $5==end)print $1,$2-1,$3+($5*4)}' OFS='\t' ~/human_demog_DFE/DFE_inference/GRCh37_exons_r_m.bed) > ~/human_demog_DFE/DFE_inference/fasta/ancestral/region"${regions[i]}"_exons_intergenic.fasta; done
+
+
+#11. RUN human_demog_DFE_empirical_divergence.ipynb TO CALCULATE DIVERGENCE VALUES
+
+#12. RUN human_demog_DFE_parse_empirical_summary_stats.ipynb TO CREATE DF READY FOR PLOTTING
+
+

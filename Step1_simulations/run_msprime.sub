@@ -1,0 +1,27 @@
+#slim.sub
+log = MSP_reports/$(Cluster).log
+#tempProc = $(ProcID) + 1
+#newProc = $INT(tempProc)
+output = MSP_reports/$(Process).out
+error = MSP_reports/$(Process).err
+#arguments = $(newProc)
++JobDurationCategory = "Long"
+
+executable = run_msprime.sh
+
+
+transfer_input_files = /home/vsoni11/my-software/build.tar.gz, /home/vsoni11/simulation_masks.tar.gz, /home/vsoni11/human_demog_step1.py, /home/vsoni11/env5.tar.gz
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+#requirements = HAS_SINGULARITY != True
+#requirements = (OSGVO_OS_STRING == "RHEL 7")
+request_memory = 2GB 
+#^ Normally 10
+request_disk = 3GB 
+#^ Normally 5
+request_cpus = 1
+
+max_idle = 2000
+queue arguments from msprime_demog.txt

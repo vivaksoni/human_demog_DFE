@@ -1,0 +1,337 @@
+initialize() {
+   defineGlobal("fix_check", F); //Boolean used once fixation occurs
+   defineGlobal("start", clock());
+	defineConstant("scale", 1);
+	defineConstant("N", 9400);
+	//Migration rates (4Nm converted to per generation)
+	defineConstant("m_afr_eurasi", 3 / (9400*4));
+	defineConstant("m_afr_eur", 1.5 / (9400*4));
+	defineConstant("m_afr_eas", 4.5 / (9400*4));
+	defineConstant("m_afr_sas", 2.5 / (9400*4));
+	defineConstant("m_eurasi_eur", 3 / (9400*4));
+	defineConstant("m_eurasi_eas", 3 / (9400*4));
+	defineConstant("m_eurasi_sas", 3 / (9400*4));
+	defineConstant("m_eur_eas", 4 / (9400*4));
+	defineConstant("m_eur_sas", 7.5 / (9400*4));
+	defineConstant("m_eas_sas", 7.5 / (9400*4));
+	
+   //Chromosome with 7 functional regoins, each comprised of 9 1317bp exons, 8 1520bp introns, and separated by a 4322bp intergenic region
+   //Total chromosome length: 198345
+   defineConstant("exonLength", 1317); //Ensembl data
+   defineConstant("exonsPerGene", 9); //Sakharkar et al. 2004
+   defineConstant("intronsPerGene", 8); //Sakharkar et al. 2004
+   defineConstant("intronLength", 1520); //Median length: Hube and Francastel (2015)
+   defineConstant("geneLength", (exonLength * exonsPerGene) + (intronLength * intronsPerGene));
+   defineConstant("intergenicLength", 4322); //Ensembl data
+   defineConstant("totalGenes", 7);
+
+	
+	//MUTATION RATE//
+	//fixed recombination rate (Nachman and Crowell 2000 average)
+	if (d_mu_map=='fixed')
+		{
+		mu = 1.22e-8 * scale;
+		initializeMutationRate(mu);
+		}
+	//variable rate (from input file)
+	else
+		{
+		lines = readFile(d_mu_map);
+	   mu = NULL;
+	   coords = NULL;
+	   for (line in lines)
+	   	{
+	      components = strsplit(line,"\t");
+	      coords = c(coords, asInteger(components[0]));
+	      mu = c(mu, asFloat(components[1]));
+	      }
+	   mu = mu * scale;
+	   coords = c(coords[1:(size(coords)-1)] - 1, 198345);
+	   initializeMutationRate(mu, coords);
+	   }
+	
+    // mutation types:
+    //2Nes = [0, -1, -10, -100, -10000], s = [0.0, -0.0001, -0.001, -0.01, -1]
+    initializeMutationType("m1", 0.5, "f", 0.0); //selectively neutral
+    initializeMutationType("m2", 0.5, "s", "return runif(1, -10/(N*2), -1/(N*2));"); //weakly deleterious (1<2Nes<10)
+    initializeMutationType("m3", 0.5, "s", "return runif(1, -100/(N*2), -10/(N*2));"); //moderately deleterious (10<2Nes<100)
+    initializeMutationType("m4", 0.5, "s", "return runif(1, -1000/(N*2), -100/(N*2));"); //strongly deleterious (100<2Nes<1000)
+    initializeMutationType("m0", 0.5, "f", d_Nes/(N*2));
+	
+	// g1 genomic element type: uses m1 for all mutations
+	initializeGenomicElementType("g1", c(m1, m2, m3, m4), c(0.5, 0.2, 0.3, 0)); //exon
+	initializeGenomicElementType("g2", m1, 1.0); //intergenic
+	
+ //Initialise genomic element
+   //Chromosome with {totalGenes} no. ofgenes, each comprised of {exonsPerGene} {exonLength}bp exons;
+   //{intronsPerGene} {intronLength}bp introns, and separated by a {intergenicLength}bp intergenic region
+   //Loop through number of genes
+        for (gene in 1:totalGenes)
+                {
+                //Set gene start
+                geneStart = (gene-1) * (geneLength+intergenicLength) + 1;
+                //Loop through elements within gene (ie number of exons)
+                for (element in 1:exonsPerGene)
+                        {
+                        //Set exonStart and end coordinates
+                        exonStart = geneStart + (exonLength * (element-1)) + (intronLength * (element-1));
+                        exonEnd = exonStart+(exonLength-1);
+                        for (i in seq(exonStart, exonEnd-1, 3))
+                            {
+                            initializeGenomicElement(g1, i, i+2);
+                            }
+                        //Each gene contains one less intron than exons
+                        if (element < exonsPerGene)
+                                {
+                                //Set intron coordinates
+                                intronStart = exonStart + exonLength;
+                                intronEnd = intronStart+(intronLength-1);
+                               initializeGenomicElement(g2, intronStart, intronEnd);
+                                }
+                        }
+                //Set intergenic region coordinates
+                intergenicStart = exonEnd + 1;
+                intergenicEnd = intergenicStart + (intergenicLength-1);
+                initializeGenomicElement(g2, intergenicStart, intergenicEnd);
+                }
+                
+                
+	//RECOMBINATION RATE//
+	//fixed recombination rate (Payseur and Nachman 2000).
+	if (d_rr_map=='fixed')
+		{
+		rr = 1.6e-8 * scale;
+		initializeRecombinationRate(rr);
+		}
+	//variable rate (from input file - already adjusted for sex-average rate)
+	else
+		{
+		lines = readFile(d_rr_map);
+	   rr = NULL;
+	   coords = NULL;
+	   for (line in lines)
+	   	{
+	      components = strsplit(line,"\t");
+	      coords = c(coords, asInteger(components[0]));
+	      rr = c(rr, asFloat(components[1]));
+	      }
+	   rr = rr * scale * 1e-8;
+	   coords = c(coords[1:(size(coords)-1)] - 1, 198345);
+	   initializeRecombinationRate(rr, coords);
+	   }
+}
+
+// create a population of 500 individuals
+1 early() {
+	sim.addSubpop("p1", 9400);
+	community.rescheduleScriptBlock(s1, start=94001, end=94001);
+	community.rescheduleScriptBlock(s2, start=96621, end=97440);
+}
+
+s1 late() {
+    print('Burnin complete; state saved and beneficial introduced');
+    print("Peak Mem Usage: " + usage(peak = T));
+	 print("Runtime: " + (clock()-start));
+	 print('--------------------------------------------------------------');
+	// save the state of the simulation
+	sim.outputFull("states/slim2_" + d_repID + ".txt");
+	
+	// introduce the sweep mutation
+	target = sample(p2.genomes, 1);
+	target.addNewDrawnMutation(m0, 97011);
+}
+
+
+//AFR-EURASI split after 10N burnin
+94000 late(){
+	sim.addSubpopSplit("p2", 940, p1);
+	
+	p1.setMigrationRates(c(p2), c(m_afr_eur));	
+	p2.setMigrationRates(c(p1), c(m_afr_eur));	
+
+}
+
+
+//EURASI growth
+94000:97440 late(){
+	t = sim.cycle - 94000;
+	//p2_size = round(940 * (1 + 0.001)^t);
+	p2_size = round(940 / exp(-0.001 * t));
+	p2.setSubpopulationSize(asInteger(p2_size));
+}	
+
+
+//EURASI-EUR-SAS split
+96547 late(){
+	sim.addSubpopSplit("p3", asInteger(round(1200.3)), p2);
+	sim.addSubpopSplit("p4", asInteger(round(1200.3)), p2);
+	
+	p1.setMigrationRates(c(p3), c(m_afr_eur));	
+	p3.setMigrationRates(c(p1), c(m_afr_eur));	
+	p1.setMigrationRates(c(p4), c(m_afr_sas));	
+	p4.setMigrationRates(c(p1), c(m_afr_sas));
+	
+	p2.setMigrationRates(c(p3), c(m_eurasi_eur));	
+	p3.setMigrationRates(c(p2), c(m_eurasi_eur));	
+	p2.setMigrationRates(c(p4), c(m_eurasi_sas));	
+	p4.setMigrationRates(c(p2), c(m_eurasi_sas));
+	
+	p3.setMigrationRates(c(p4), c(m_eur_sas));
+	p4.setMigrationRates(c(p3), c(m_eur_sas));
+
+	catn('\n');
+
+}
+
+
+//EUR and SAS growth
+96547:97440 late(){
+
+	t = sim.cycle - 96547;
+	p3_size = round(1200.3 / exp(-0.00265 * t));
+	p3.setSubpopulationSize(asInteger(p3_size));
+	p4_size = round(1200.3 / exp(-0.00285 * t));
+	p4.setSubpopulationSize(asInteger(p4_size));
+
+}
+
+
+
+//EURASI-EAS split
+96621 late(){
+	sim.addSubpopSplit("p5", asInteger(round(1163.2)), p2);
+	
+	p1.setMigrationRates(c(p5), c(m_afr_eas));	
+	p2.setMigrationRates(c(p5), c(m_eurasi_eas));	
+	p3.setMigrationRates(c(p5), c(m_eur_eas));	
+	p4.setMigrationRates(c(p5), c(m_eas_sas));
+	
+	p5.setMigrationRates(c(p1), c(m_afr_eas));	
+	p5.setMigrationRates(c(p2), c(m_eurasi_eas));	
+	p5.setMigrationRates(c(p3), c(m_eur_eas));	
+	p5.setMigrationRates(c(p4), c(m_eas_sas));
+
+	catn('\n');
+}
+
+
+//EAS growth
+96621:97440 late(){
+
+	t = sim.cycle - 96621;
+	p5_size = round(1163.2 / exp(-0.00125 * t));
+	p5.setSubpopulationSize(asInteger(p5_size));
+
+}
+
+
+//Bantu expansion
+97067:97440 late(){
+	t = sim.cycle - 97067;
+	p1_size = round(9400 / exp(-0.006 * t));
+	p1.setSubpopulationSize(asInteger(p1_size));
+}
+
+
+s2 late(){
+   myMut = sim.mutationsOfType(m0);
+	if (sim.countOfMutationsOfType(m0) != 0)
+	{  
+		if ((sim.mutationFrequencies(p3, myMut) == 0) & (sim.mutationFrequencies(p4, myMut) == 0) & (sim.mutationFrequencies(p5, myMut) == 0))
+		{
+			cat("LOST - RESTARTING\n");
+			
+			// go back to tick 1000
+			sim.readFromPopulationFile("states/slim2_" + d_repID + ".txt");
+			
+			// start a newly seeded run
+			setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+			
+			// re-introduce the sweep mutation
+			target = sample(p2.genomes, 1);
+			target.addNewDrawnMutation(m0, 97011);
+		}   
+	
+		else if ((sim.mutationFrequencies(p3, myMut) == 1.0) & (sim.mutationFrequencies(p4, myMut) == 1.0) & (sim.mutationFrequencies(p5, myMut) == 1.0))
+		{
+			cat("FIXED\n");
+			sim.outputMutations(myMut, d_folder + "/rep" + d_repID + "_model2.bs", append=F);
+			defineGlobal("fix_check", T);
+			community.deregisterScriptBlock(self);
+		}
+	}	
+	else
+	{
+		cat("LOST - RESTARTING\n");	
+		// go back to tick 1000
+		sim.readFromPopulationFile("states/slim2_" + d_repID + ".txt");
+		
+		// start a newly seeded run
+		setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+		
+		// re-introduce the sweep mutation
+		target = sample(p2.genomes, 1);
+		target.addNewDrawnMutation(m0, 97011);	
+	}
+}
+
+
+
+// output samples of 10 genomes periodically, all fixed mutations at end
+97440 late(){
+
+	if (fix_check)
+	{
+   sim.simulationFinished();
+	cat("SIMULATION COMPLETE\n");
+	allIndividuals = p1.individuals;
+	sampledIndividuals = sample(allIndividuals, 99);
+	sampledIndividuals.genomes.outputMS(d_folder + "/AFR_rep" + d_repID + "_model2.ms", append=F); 
+	
+	allIndividuals = p3.individuals;
+	sampledIndividuals = sample(allIndividuals, 502);
+	sampledIndividuals.genomes.outputMS(d_folder + "/EUR_rep" + d_repID + "_model2.ms", append=F);  
+	
+	allIndividuals = p4.individuals;
+	sampledIndividuals = sample(allIndividuals, 489);
+	sampledIndividuals.genomes.outputMS(d_folder + "/SAS_rep" + d_repID + "_model2.ms", append=F);  
+	
+	allIndividuals = p5.individuals;
+	sampledIndividuals = sample(allIndividuals, 104);
+	sampledIndividuals.genomes.outputMS(d_folder + "/EAS_rep" + d_repID + "_model2.ms", append=F);     
+
+   //print all fixed mutations
+   muts = sim.mutations;
+   p = sim.mutationFrequencies(p1, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/AFR_rep" + d_repID + "_model2.fixed");
+   
+   p = sim.mutationFrequencies(p3, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/EUR_rep" + d_repID + "_model2.fixed");
+   
+   p = sim.mutationFrequencies(p4, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/SAS_rep" + d_repID + "_model2.fixed");
+   
+   p = sim.mutationFrequencies(p5, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/EAS_rep" + d_repID + "_model2.fixed");
+	sim.outputFixedMutations(d_folder + "/rep" + d_repID + "_model2.fixed");
+	}
+
+	else
+	{  
+	cat("STILL SEGREGATING - RESTARTING\n");
+	
+	// go back to tick 1000
+	sim.readFromPopulationFile("states/slim2_" + d_repID + ".txt");
+	
+	// start a newly seeded run
+	setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+	
+	// re-introduce the sweep mutation
+	target = sample(p2.genomes, 1);
+	target.addNewDrawnMutation(m0, 97011);			
+	}
+}

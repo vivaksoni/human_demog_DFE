@@ -1,0 +1,24 @@
+#run_sf2.sub
+log = sf_reports/sf.$(Cluster).log
+output = sf_reports/sf.$(Process).out
+error = sf_reports/sf.$(Process).err
++JobDurationCategory = "Long"
+executable = run_SF2.sh
+
+
+#transfer_input_files = /home/vsoni11/my-software/build.tar.gz, /home/vsoni11/rr_mu_demog_inference.tar.gz 
+transfer_input_files = /home/vsoni11/SF2.tar.gz, /home/vsoni11/SF_files.tar.gz
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+#requirements = (OSGVO_OS_STRING == "RHEL 7")
+#requirements = HAS_SINGULARITY != True
+#requirements = (GlideIN_Site != "UConn-HPC")
+request_memory = 8GB
+request_disk = 8GB
+request_cpus = 1
+
+
+max_idle = 2000
+queue arguments from SF_realisations2.txt

@@ -1,0 +1,200 @@
+initialize() {
+   defineGlobal("start", clock());
+   defineConstant("exon_len", d_exon_len);    
+   defineConstant("N", 9400);
+	defineConstant("mu", d_mu);
+	defineConstant("ro", d_r * 1e-8);
+	//Migration rates (4Nm converted to per generation)
+	defineConstant("m_afr_eurasi", 3 / (9400*4));
+	defineConstant("m_afr_eur", 1.5 / (9400*4));
+	defineConstant("m_afr_eas", 4.5 / (9400*4));
+	defineConstant("m_afr_sas", 2.5 / (9400*4));
+	defineConstant("m_eurasi_eur", 3 / (9400*4));
+	defineConstant("m_eurasi_eas", 3 / (9400*4));
+	defineConstant("m_eurasi_sas", 3 / (9400*4));
+	defineConstant("m_eur_eas", 4 / (9400*4));
+	defineConstant("m_eur_sas", 7.5 / (9400*4));
+	defineConstant("m_eas_sas", 7.5 / (9400*4));
+	
+	initializeMutationRate(mu);
+
+    // mutation types:
+    //2Nes = [10, 1, 0, -1, -10, -100, -10000], s = [0.001, 0.0001, 0.0, -0.0001, -0.001, -0.01, -1]
+    initializeMutationType("m1", 0.5, "s", "return runif(1, 1/(N*2), 10/(N*2));"); //weakly beneficial (10<2Nes<1)
+    initializeMutationType("m2", 0.5, "f", 0.0); //selectively neutral
+    initializeMutationType("m3", 0.5, "s", "return runif(1, -10/(N*2), -1/(N*2));"); //weakly deleterious (1<2Nes<10)
+    initializeMutationType("m4", 0.5, "s", "return runif(1, -100/(N*2), -10/(N*2));"); //moderately deleterious (10<2Nes<100)
+    initializeMutationType("m5", 0.5, "s", "return runif(1, -1000/(N*2), -100/(N*2));"); //strongly deleterious (100<2Nes<100)
+
+    // g1 genomic element type: uses m1 for all mutations
+    initializeGenomicElementType("g1", c(m1, m2, m3, m4, m5), c(d_fb, d_f0, d_f1, d_f2, d_f3)); //exon
+    //initializeGenomicElementType("g2", m2, 1.0); //intergenic
+
+    initializeGenomicElement(g1, 1, exon_len+1);
+    //initializeGenomicElement(g1, exon_len+2, exon_len+intergenic_len+2);
+    initializeRecombinationRate(ro);
+}
+
+// create a population of 500 individuals
+1 early() {
+	sim.addSubpop("p1", 9400);
+}
+
+//AFR-EURASI split after 10N burnin
+540100 late(){
+	sim.addSubpopSplit("p2", 940, p1);
+	
+	p1.setMigrationRates(c(p2), c(m_afr_eur));	
+	p2.setMigrationRates(c(p1), c(m_afr_eur));	
+	print(size(p1.individuals));
+	print(size(p2.individuals));
+	catn('\n');
+}
+
+
+//EURASI growth
+540100:543540 late(){
+	t = sim.cycle - 540100;
+	//p2_size = round(940 * (1 + 0.001)^t);
+	p2_size = round(940 / exp(-0.001 * t));
+	p2.setSubpopulationSize(asInteger(p2_size));
+}	
+
+
+//EURASI-EUR-SAS split
+542647 late(){
+	sim.addSubpopSplit("p3", asInteger(round(1200.3)), p2);
+	sim.addSubpopSplit("p4", asInteger(round(1200.3)), p2);
+	
+	p1.setMigrationRates(c(p3), c(m_afr_eur));	
+	p3.setMigrationRates(c(p1), c(m_afr_eur));	
+	p1.setMigrationRates(c(p4), c(m_afr_sas));	
+	p4.setMigrationRates(c(p1), c(m_afr_sas));
+	
+	p2.setMigrationRates(c(p3), c(m_eurasi_eur));	
+	p3.setMigrationRates(c(p2), c(m_eurasi_eur));	
+	p2.setMigrationRates(c(p4), c(m_eurasi_sas));	
+	p4.setMigrationRates(c(p2), c(m_eurasi_sas));
+	
+	p3.setMigrationRates(c(p4), c(m_eur_sas));
+	p4.setMigrationRates(c(p3), c(m_eur_sas));
+
+	print(size(p1.individuals));
+	print(size(p2.individuals));
+	print(size(p3.individuals));
+	print(size(p4.individuals));
+	catn('\n');
+
+}
+
+
+//EUR and SAS growth
+542647:543540 late(){
+
+	t = sim.cycle - 542647;
+	p3_size = round(1200.3 / exp(-0.00265 * t));
+	p3.setSubpopulationSize(asInteger(p3_size));
+	p4_size = round(1200.3 / exp(-0.00285 * t));
+	p4.setSubpopulationSize(asInteger(p4_size));
+
+//	t2 = T_eurasi_eur_sas - T_afr_eurasi;
+//	c1 = (N_afr_anc * B_eurasi) * (1 + r_eurasi)^t2;
+//	
+//	t = sim.cycle - T_eurasi_eur_sas;
+//	p3_size = round((c1 * B_eur) * (1 + r_eur)^t);
+//	p4_size = round(asInteger(round(c1 * B_sas)) * (1 + r_sas)^t);
+//	p3.setSubpopulationSize(asInteger(p3_size));
+//	p4.setSubpopulationSize(asInteger(p4_size));
+}
+
+
+
+//EURASI-EAS split
+542721 late(){
+	sim.addSubpopSplit("p5", asInteger(round(1163.2)), p2);
+	
+	p1.setMigrationRates(c(p5), c(m_afr_eas));	
+	p2.setMigrationRates(c(p5), c(m_eurasi_eas));	
+	p3.setMigrationRates(c(p5), c(m_eur_eas));	
+	p4.setMigrationRates(c(p5), c(m_eas_sas));
+	
+	p5.setMigrationRates(c(p1), c(m_afr_eas));	
+	p5.setMigrationRates(c(p2), c(m_eurasi_eas));	
+	p5.setMigrationRates(c(p3), c(m_eur_eas));	
+	p5.setMigrationRates(c(p4), c(m_eas_sas));
+	
+	print(size(p1.individuals));
+	print(size(p2.individuals));
+	print(size(p3.individuals));
+	print(size(p4.individuals));
+	print(size(p5.individuals));
+	catn('\n');
+}
+
+
+//EAS growth
+542721:543540 late(){
+
+	t = sim.cycle - 542721;
+	p5_size = round(1163.2 / exp(-0.00125 * t));
+	p5.setSubpopulationSize(asInteger(p5_size));
+
+}
+
+
+//Bantu expansion
+543167:543540 late(){
+	t = sim.cycle - 543167;
+	p1_size = round(9400 / exp(-0.006 * t));
+	p1.setSubpopulationSize(asInteger(p1_size));
+}
+
+
+// output samples of 10 genomes periodically, all fixed mutations at end
+543540 late(){
+//	print(size(p1.individuals));
+//	print(size(p2.individuals));
+//	print(size(p3.individuals));
+//	print(size(p4.individuals));
+//	print(size(p5.individuals));
+   print("Peak Mem Usage: " + usage(peak = T));
+   print("Runtime: " + (clock()-start));
+	allIndividuals = p1.individuals;
+	sampledIndividuals = sample(allIndividuals, 99);
+	sampledIndividuals.genomes.outputMS(d_folder + "/AFR_region" + d_regionID + "_rep" + d_repID + ".ms", append=F); 
+	
+	allIndividuals = p3.individuals;
+	sampledIndividuals = sample(allIndividuals, 502);
+	sampledIndividuals.genomes.outputMS(d_folder + "/EUR_region" + d_regionID + "_rep" + d_repID + ".ms", append=F);  
+	
+	allIndividuals = p4.individuals;
+	sampledIndividuals = sample(allIndividuals, 489);
+	sampledIndividuals.genomes.outputMS(d_folder + "/SAS_region" + d_regionID + "_rep" + d_repID + ".ms", append=F);  
+	
+	allIndividuals = p5.individuals;
+	sampledIndividuals = sample(allIndividuals, 104);
+	sampledIndividuals.genomes.outputMS(d_folder + "/EAS_region" + d_regionID + "_rep" + d_repID + ".ms", append=F);     
+
+   //print all fixed mutations
+   muts = sim.mutations;
+   p = sim.mutationFrequencies(p1, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/AFR_region" + d_regionID + "_rep" + d_repID + ".fixed");
+   
+   p = sim.mutationFrequencies(p3, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/EUR_region" + d_regionID + "_rep" + d_repID + ".fixed");
+   
+   p = sim.mutationFrequencies(p4, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/SAS_region" + d_regionID + "_rep" + d_repID + ".fixed");
+   
+   p = sim.mutationFrequencies(p5, muts);
+   fixed1 = muts[(p == 1.0)];
+   sim.outputMutations(fixed1, d_folder + "/EAS_region" + d_regionID + "_rep" + d_repID + ".fixed");
+
+   sim.outputFixedMutations(d_folder + "/region" + d_regionID + "_rep" + d_repID + ".fixed");
+
+
+
+}

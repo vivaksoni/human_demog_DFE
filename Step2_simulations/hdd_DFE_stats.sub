@@ -1,0 +1,27 @@
+#slim.sub
+log = hdd_reports/$(Cluster).log
+#tempProc = $(ProcID) + 1
+#newProc = $INT(tempProc)
+output = stats_reports/$(Process).out
+error = stats_reports/$(Process).err
+#arguments = $(newProc)
++JobDurationCategory = "Long"
+
+executable = hdd_DFE_stats.sh
+
+
+transfer_input_files = /home/vsoni11/my-software/build.tar.gz, /home/vsoni11/hdd_DFE_stats.py, /home/vsoni11/env5.tar.gz, /home/vsoni11/demog_DFE_div_sims.tar.gz
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+#requirements = HAS_SINGULARITY != True
+#requirements = (OSGVO_OS_STRING == "RHEL 7")
+request_memory = 5GB 
+#^ Normally 10
+request_disk = 20GB 
+#^ Normally 5
+request_cpus = 1
+
+max_idle = 2000
+queue arguments from /home/vsoni11/human_demog_DFE/DFE_inference/hdd_recSweeps_stats.input3

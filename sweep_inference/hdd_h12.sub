@@ -1,0 +1,27 @@
+#slim.sub
+log = hdd_reports/$(Cluster).log
+#tempProc = $(ProcID) + 1
+#newProc = $INT(tempProc)
+output = hdd_reports/$(Process).out
+error = hdd_reports/$(Process).err
+#arguments = $(newProc)
++JobDurationCategory = "Long"
+
+executable = hdd_h12.sh
+
+
+transfer_input_files = /home/vsoni11/my-software/build.tar.gz, /home/vsoni11/human_demog_DFE/scripts/hdd_h12.py, /home/vsoni11/env5.tar.gz, osdf:///ospool/ap21/data/vsoni11/hdd_res/sweep_detection/singleSweep/sims.tar.gz
+
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+
+#requirements = HAS_SINGULARITY != True
+#requirements = (OSGVO_OS_STRING == "RHEL 7")
+request_memory = 10GB 
+#^ Normally 10
+request_disk = 10GB 
+#^ Normally 5
+request_cpus = 1
+
+max_idle = 2000
+queue arguments from /home/vsoni11/h12_realisations2.txt
